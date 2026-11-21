@@ -67,6 +67,7 @@ section h3{font-size:12px;color:#4fc3f7;margin-bottom:8px;display:flex;justify-c
 .warn{color:#f59e0b;font-size:11px;margin:4px 0;}
 .err{color:#ef4444;font-size:12px;margin:4px 0;font-weight:600;}
 .row{display:flex;gap:6px;flex-wrap:wrap;}
+.actions:empty{display:none;}
 .prog{font-weight:700;}
 .item{border-top:1px solid #1e293b;padding:6px 0;display:flex;align-items:center;gap:6px;}
 .item:first-child{border-top:none;}
@@ -115,7 +116,7 @@ td.del{cursor:pointer;color:#ef4444;}
       <button id="ovBtn" title="저장한 측정 표시 켜기/끄기">저장 측정 표시</button>
       <span id="wlLabel"></span>
     </div>
-    <div class="help">좌클릭: 점 찍기 · 좌드래그: 이동 · 점 위에서 드래그: 점 옮기기 · 우드래그 또는 Shift+드래그: 밝기/대비 · 휠: 확대/축소 · Enter: 저장 · Backspace: 마지막 점 삭제 · Esc: 측정 취소</div>
+    <div class="help">좌클릭: 점 찍기 · 좌드래그: 이동 · 점 위에서 드래그: 점 옮기기 · 우드래그 또는 Shift+드래그: 밝기/대비 · 휠: 확대/축소 · Enter: 저장 · Backspace: 마지막 점 삭제 · Esc: 점 모두 지우기</div>
   </div>
 
   <div class="panel">
@@ -128,10 +129,12 @@ td.del{cursor:pointer;color:#ef4444;}
         <label>관절</label><input id="joint" list="jointList" placeholder="관절 형태"><datalist id="jointList"><option>DIPJ</option><option>Elbow</option><option>Wrist</option></datalist>
         <label>측</label><div class="seg"><button data-side="Rt">Rt</button><button data-side="Lt">Lt</button></div>
         <label>촬영일</label><input id="date" type="date">
-        <label>View</label><select id="view"><option value="">— 선택 —</option><option>AP</option><option>PA</option><option>Lateral</option><option>Oblique</option><option>CT sagittal</option><option>기타</option></select>
+        <label>측정일</label><input id="mdate" type="date" title="기본값은 오늘. 저장할 때 이 날짜가 측정일로 기록된다">
       </div>
       <div class="ctx" id="ctxInfo"></div>
     </section>
+
+    <div class="row actions" id="actionRow"></div>
 
     <section id="activeSec" class="idle">
       <h3>현재 측정</h3>
@@ -293,7 +296,7 @@ function arcSpan(c,pa,pb,big){
    1단계 p1–p3 → 원 1: c1, r1
    2단계 p4·p5 → c1 중심 동심원: r2 = (|c1p4| + |c1p5|)/2, a1 = ∠p4 c1 p5 (원호의 중심각)
    3단계 p6·p7 → 반지름 r2로 p6·p7을 지나는 원 (중심 후보 2개 중 c1에 가까운 것 = c2), a2 = 원호 p6p7의 원주각(= 중심각/2) */
-function computeConc(P,big1,big2){
+function computeConc(P,big1,big2,raw5){
   const R={stage:0,warn:[]};
   if(P.length<3)return R;
   const k=circum(P[0],P[1],P[2]);
@@ -302,9 +305,8 @@ function computeConc(P,big1,big2){
   if(P.length<4)return R;
   R.d4=dist(k.c,P[3]);
   if(P.length<5)return R;
-  R.d5=dist(k.c,P[4]);R.r2=(R.d4+R.d5)/2;
+  R.d5=dist(k.c,raw5||P[4]);R.r2=R.d4;R.jt=R.r2-R.r1;R.dr=R.d5-R.r2;
   const s1=arcSpan(k.c,P[3],P[4],big1);R.a1=s1.deg;R.arc1=s1;R.stage=2;
-  if(R.r2>0&&Math.abs(R.d4-R.d5)/R.r2>0.05)R.warn.push('|c1p4|와 |c1p5| 차이가 '+(Math.abs(R.d4-R.d5)/R.r2*100).toFixed(1)+'%입니다. r2는 두 거리의 평균입니다.');
   if(P.length<7)return R;
   const q6=P[5],q7=P[6],ch=sub(q7,q6),half=len(ch)/2;
   if(half<1e-9){R.err='p6과 p7이 같은 위치입니다.';return R;}
@@ -325,7 +327,7 @@ const MEASURES=[{
   code:'CONC',name:'동심원 측정',
   stages:[
     {n:3,title:'1단계 · 원 1 (c1, r1)',steps:['p1 — 원 1 위의 점','p2 — 원 1 위의 점','p3 — 원 1 위의 점']},
-    {n:5,title:'2단계 · c1 중심 동심원 (r2, a1)',steps:['p4 — 원호 시작점','p5 — 원호 끝점']},
+    {n:5,title:'2단계 · c1 중심 동심원 (r2, a1)',steps:['p4 — 원호 시작점 (r2 = |c1p4|)','p5 — 원호 끝점 (원 위로 맞춰짐)']},
     {n:7,title:'3단계 · 반지름 r2인 원 2 (c2, a2)',steps:['p6 — 원 2 위의 점','p7 — 원 2 위의 점']}
   ]
 }];
@@ -339,7 +341,7 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),cx=cv.getContext('2d');
 const off=document.createElement('canvas'),ox=off.getContext('2d');
 const S={im:null,file:'',wc:0,ww:1,invert:false,overlay:false,scale:1,tx:0,ty:0,
-  active:null,pts:[],big1:false,big2:false,side:'',files:[],idx:-1};
+  active:null,pts:[],p5raw:null,big1:false,big2:false,side:'',files:[],idx:-1};
 let mouse={down:false};
 
 function loadRecs(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');}catch(e){return[];}}
@@ -394,8 +396,8 @@ function cross(p,col,lbl){line({x:p.x-7,y:p.y},{x:p.x+7,y:p.y},col,2);line({x:p.
 function label(t,p,col,sz){cx.font='bold '+(sz||13)+'px sans-serif';cx.fillStyle='#000';cx.fillText(t,p.x+1,p.y+1);cx.fillStyle=col;cx.fillText(t,p.x,p.y);}
 function boxText(t,p,col){cx.font='bold 13px sans-serif';const w=cx.measureText(t).width;cx.fillStyle='rgba(0,0,0,.65)';cx.fillRect(p.x-3,p.y-14,w+6,18);cx.fillStyle=col;cx.fillText(t,p.x,p.y);}
 const PAL={c1:'#facc15',c2:'#f472b6',c3:'#34d399'};
-function drawConc(ptsImg,big1,big2,pal,showLbl){
-  const P=ptsImg.map(toMM),R=computeConc(P,big1,big2),s=ptsImg.map(toScr);
+function drawConc(ptsImg,big1,big2,pal,showLbl,raw5){
+  const P=ptsImg.map(toMM),R=computeConc(P,big1,big2,raw5&&toMM(raw5)),s=ptsImg.map(toScr);
   if(R.stage>=1){
     arcMM(R.c1,R.r1,0,2*Math.PI,pal.c1,1.8);
     cross(mmScr(R.c1),pal.c1,showLbl?'c1':'');
@@ -415,9 +417,12 @@ function drawConc(ptsImg,big1,big2,pal,showLbl){
     arcMM(R.c2,R.r2,0,2*Math.PI,pal.c3,1,[6,5]);
     arcMM(R.c2,R.r2,R.arc2.t0,R.arc2.dt,pal.c3,3.5);
     const c2s=mmScr(R.c2);cross(c2s,pal.c3,showLbl?'c2':'');
-    line(mmScr(R.c1),c2s,'#fff',1.2,[2,3]);
+    [5,6].forEach(i=>{if(s[i])line(c2s,s[i],pal.c3,1.2,[5,4]);});
+    const c1s=mmScr(R.c1);line(c1s,c2s,'#fff',1.2,[2,3]);
+    if(showLbl)boxText('c1–c2 '+fmtL(R.cc),{x:(c1s.x+c2s.x)/2+8,y:(c1s.y+c2s.y)/2-6},'#fff');
     if(showLbl){const tm=R.arc2.t0+R.arc2.dt/2,q=mmScr({x:R.c2.x+R.r2*1.25*Math.cos(tm),y:R.c2.y+R.r2*1.25*Math.sin(tm)});boxText('a2 '+fmtA(R.a2),q,pal.c3);}
   }
+  if(raw5&&s[4]){const q=toScr(raw5);if(Math.hypot(q.x-s[4].x,q.y-s[4].y)>2){line(s[4],q,pal.c2,1,[2,3]);cx.strokeStyle=pal.c2;cx.lineWidth=1.5;cx.beginPath();cx.arc(q.x,q.y,4,0,Math.PI*2);cx.stroke();}}
   s.forEach((p,i)=>dotP(p,i<3?pal.c1:i<5?pal.c2:pal.c3,showLbl?'p'+(i+1):''));
   return R;
 }
@@ -428,9 +433,9 @@ function redraw(){
   cx.drawImage(off,S.tx,S.ty,S.im.cols*S.scale,S.im.rows*S.scale);
   if(S.overlay)ctxRecs().forEach(rec=>{
     if(S.active&&S.active.code===rec.code)return;
-    const c='#38bdf8';drawConc(rec.pts.map(p=>({x:p[0],y:p[1]})),rec.big1,rec.big2,{c1:c,c2:c,c3:c},false);
+    const c='#38bdf8';drawConc(rec.pts.map(p=>({x:p[0],y:p[1]})),rec.big1,rec.big2,{c1:c,c2:c,c3:c},false,rec.p5raw&&{x:rec.p5raw[0],y:rec.p5raw[1]});
   });
-  if(S.active&&S.pts.length)drawConc(S.pts,S.big1,S.big2,PAL,true);
+  if(S.active&&S.pts.length)drawConc(S.pts,S.big1,S.big2,PAL,true,S.p5raw);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -444,15 +449,15 @@ async function openFile(file){
   S.im=im;S.file=file.name;S.wc=im.wc0;S.ww=im.ww0;S.invert=false;$('invBtn').classList.remove('on');
   cancelActive(true);
   if(im.studyDate)$('date').value=im.studyDate;
+  $('mdate').value=todayStr();
   const desc=(im.seriesDesc+' '+im.protocol+' '+im.viewPos).toLowerCase();
-  $('view').value=/lat/.test(desc)?'Lateral':/obl/.test(desc)?'Oblique':/\bpa\b/.test(desc)?'PA':/\bap\b/.test(desc)?'AP':'';
   const lat=(im.laterality||'').toUpperCase();
   setSide(lat==='R'||/\brt\b|right/.test(desc)?'Rt':lat==='L'||/\blt\b|left/.test(desc)?'Lt':'');
   // 이 영상에 저장된 기록이 있으면 그 정보를 우선한다
   const ex=rater()?ctxRecs()[0]:null;
   const seg=(file.webkitRelativePath||'').split('/');
   if(ex){
-    $('pid').value=ex.patient_name||'';$('joint').value=ex.joint||'';$('view').value=ex.view||'';setSide(ex.side||'');if(ex.image_date)$('date').value=ex.image_date;
+    $('pid').value=ex.patient_name||'';$('joint').value=ex.joint||'';setSide(ex.side||'');if(ex.image_date)$('date').value=ex.image_date;if(ex.measure_date)$('mdate').value=ex.measure_date;
     if(seg.length>1&&seg[0].trim()&&ex.patient_name&&ex.patient_name!==seg[0].trim().normalize('NFC'))
       flashHint('저장된 환자명 "'+ex.patient_name+'"을 그대로 두었습니다 (폴더 이름: '+seg[0]+')',true);
   }else if(seg.length>1&&seg[0].trim())$('pid').value=seg[0].trim().normalize('NFC');
@@ -494,14 +499,14 @@ function startMeasure(code,quiet){
   if(!quiet&&!okToLeave())return;
   S.active=M_BY[code];
   const ex=ctxRecs().find(r=>r.code===code);
-  S.pts=ex?ex.pts.map(p=>({x:p[0],y:p[1]})):[];S.big1=!!(ex&&ex.big1);S.big2=!!(ex&&ex.big2);S.dirty=false;
+  S.pts=ex?ex.pts.map(p=>({x:p[0],y:p[1]})):[];S.big1=!!(ex&&ex.big1);S.big2=!!(ex&&ex.big2);S.p5raw=ex&&ex.p5raw?{x:ex.p5raw[0],y:ex.p5raw[1]}:(S.pts[4]||null);snapP5();S.dirty=false;
   refreshUI();redraw();
 }
 function cancelActive(silent){S.active=null;S.pts=[];S.dirty=false;if(!silent){refreshUI();redraw();}}
 function needContext(){
-  const m=[];if(!$('pid').value.trim())m.push('환자명');if(!$('joint').value.trim())m.push('관절');if(!S.side)m.push('측');if(!$('date').value)m.push('촬영일');if(!$('view').value)m.push('View');return m;
+  const m=[];if(!$('pid').value.trim())m.push('환자명');if(!$('joint').value.trim())m.push('관절');if(!S.side)m.push('측');if(!$('date').value)m.push('촬영일');if(!$('mdate').value)m.push('측정일');return m;
 }
-function curResult(){return computeConc(S.pts.map(toMM),S.big1,S.big2);}
+function curResult(){return computeConc(S.pts.map(toMM),S.big1,S.big2,S.p5raw&&toMM(S.p5raw));}
 function saveActive(){
   const a=S.active;if(!a)return;
   const n=S.pts.length,R=curResult();
@@ -515,11 +520,11 @@ function saveActive(){
   const im=S.im,r4=v=>v===undefined?undefined:+v.toFixed(4),img=p=>p?mmToImg(p):null;
   const c1=img(R.c1),c2=img(R.c2);
   const rec={id:Date.now()+'-'+Math.random().toString(36).slice(2,7),saved_at:new Date().toISOString(),
-    rater:rater(),trial:$('trial').value,patient_name:$('pid').value.trim(),joint:$('joint').value.trim(),side:S.side,image_date:$('date').value,view:$('view').value,
+    rater:rater(),trial:$('trial').value,patient_name:$('pid').value.trim(),joint:$('joint').value.trim(),side:S.side,image_date:$('date').value,measure_date:$('mdate').value,
     file:S.file,ps_row_mm:im.psR||'',ps_col_mm:im.psC||'',ps_source:im.psSrc,unit:unitLen(),
     code:a.code,stage:R.stage,big1:S.big1,big2:S.big2,
-    pts:S.pts.map(p=>[+p.x.toFixed(1),+p.y.toFixed(1)]),
-    res:{r1:r4(R.r1),c1x:c1&&+c1.x.toFixed(1),c1y:c1&&+c1.y.toFixed(1),d4:r4(R.d4),d5:r4(R.d5),r2:r4(R.r2),a1:r4(R.a1),
+    pts:S.pts.map(p=>[+p.x.toFixed(1),+p.y.toFixed(1)]),p5raw:S.pts.length>=5&&S.p5raw?[+S.p5raw.x.toFixed(1),+S.p5raw.y.toFixed(1)]:null,
+    res:{r1:r4(R.r1),c1x:c1&&+c1.x.toFixed(1),c1y:c1&&+c1.y.toFixed(1),d4:r4(R.d4),d5:r4(R.d5),dr:r4(R.dr),r2:r4(R.r2),jt:r4(R.jt),a1:r4(R.a1),
       c2x:c2&&+c2.x.toFixed(1),c2y:c2&&+c2.y.toFixed(1),a2:r4(R.a2),a2c:r4(R.a2c),cc:r4(R.cc)}};
   const all=loadRecs(),i=all.findIndex(r=>ctxMatch(r)&&r.code===a.code);
   if(i>=0){rec.id=all[i].id;all[i]=rec;}else all.push(rec);
@@ -545,7 +550,9 @@ function resultTable(R){
   return '<table class="res">'
     +'<tr><td>c1 중심</td><td class="v"><small>'+pxP(R.c1)+'</small></td></tr>'
     +'<tr><td>r1 반지름</td><td class="v">'+fmtL(R.r1)+'</td></tr>'
-    +'<tr><td>r2 동심원 반지름</td><td class="v">'+fmtL(R.r2)+(R.d5!==undefined?'<br><small>|c1p4| '+R.d4.toFixed(2)+' · |c1p5| '+R.d5.toFixed(2)+'</small>':'')+'</td></tr>'
+    +'<tr><td>r2 동심원 반지름</td><td class="v">'+fmtL(R.r2)+(R.r2!==undefined?'<br><small>= |c1p4|</small>':'')+'</td></tr>'
+    +'<tr><td>Δr5 p5 반경 편차 <small class="muted">(|c1p5| − r2)</small></td><td class="v">'+(R.dr===undefined?'—':(R.dr>=0?'+':'')+fmtL(R.dr)+'<br><small>|c1p5| '+R.d5.toFixed(2)+' · '+(R.dr/R.r2*100>=0?'+':'')+(R.dr/R.r2*100).toFixed(1)+'%</small>')+'</td></tr>'
+    +'<tr><td>Joint thickness <small class="muted">(r2 − r1)</small></td><td class="v">'+fmtL(R.jt)+'</td></tr>'
     +'<tr><td>a1 ∠p4 c1 p5'+(R.stage>=2?arcBtn(1,S.big1):'')+'</td><td class="v">'+fmtA(R.a1)+'</td></tr>'
     +'<tr><td>c2 중심</td><td class="v"><small>'+pxP(R.c2)+'</small></td></tr>'
     +'<tr><td>a2 원호 p6p7 원주각'+(R.stage>=3?arcBtn(2,S.big2):'')+'</td><td class="v">'+fmtA(R.a2)+(R.a2c!==undefined?'<br><small>중심각 '+R.a2c.toFixed(1)+'°</small>':'')+'</td></tr>'
@@ -554,12 +561,12 @@ function resultTable(R){
 }
 function refreshUI(){
   $('rater').classList.toggle('need',!rater());
-  ['pid','joint','date'].forEach(id=>$(id).classList.toggle('need',!$(id).value.trim()));
-  $('view').classList.toggle('need',!$('view').value);
+  ['pid','joint','date','mdate'].forEach(id=>$(id).classList.toggle('need',!$(id).value.trim()));
   $('ctxInfo').textContent=S.im?('기록 단위: '+(rater()||'측정자?')+' · '+$('trial').value+'회차 · '+S.file):'';
   const a=S.active,body=$('activeBody'),h=$('stepHint');
   $('activeSec').classList.toggle('idle',!a);
   if(!a){
+    $('actionRow').innerHTML='';
     body.innerHTML='<div class="muted">'+(S.im?(rater()?'아래 측정 항목 이름을 누르면 측정을 시작합니다.':'측정자 이름을 입력하면 측정을 시작합니다.'):'DICOM 파일을 여세요.')+'</div>';
     if(!h.dataset.flash)h.classList.add('hidden');
   }else{
@@ -567,9 +574,9 @@ function refreshUI(){
     body.innerHTML='<div class="aname">'+esc(a.name)+'</div>'
       +a.stages.map(st=>'<div class="stage">'+esc(st.title)+'</div><ol class="steps">'+st.steps.map(s=>{const i=k++;return '<li data-n="p'+(i+1)+'" class="'+(i<n?'done':i===n?'cur':'')+'">'+esc(s.replace(/^p\d+ — /,''))+'</li>';}).join('')+'</ol>').join('')
       +(R.err?'<div class="err">⚠ '+esc(R.err)+'</div>':'')+R.warn.map(w=>'<div class="warn">'+esc(w)+'</div>').join('')
-      +resultTable(R)
-      +'<div class="row"><button class="btn primary" id="saveBtn"'+(n<3?' disabled':'')+'>💾 저장 (Enter)</button>'
-      +'<button class="btn" id="undoBtn"'+(n?'':' disabled')+'>↶ 마지막 점</button><button class="btn" id="clearPts">점 모두 지우기</button><button class="btn" id="cancelBtn">닫기</button></div>';
+      +resultTable(R);
+    $('actionRow').innerHTML='<button class="btn primary" id="saveBtn"'+(n<3?' disabled':'')+'>💾 저장 (Enter)</button>'
+      +'<button class="btn" id="undoBtn"'+(n?'':' disabled')+'>↶ 마지막 점 (Backspace)</button><button class="btn" id="clearPts"'+(n?'':' disabled')+'>점 모두 지우기 (Esc)</button><button class="btn" id="cancelBtn">닫기</button>';
     $('saveBtn').onclick=saveActive;
     $('undoBtn').onclick=()=>{S.pts.pop();S.dirty=true;refreshUI();redraw();};
     $('clearPts').onclick=()=>{S.pts=[];S.dirty=true;refreshUI();redraw();};
@@ -596,14 +603,16 @@ $('activeBody').addEventListener('click',e=>{const k=e.target.dataset.arc;if(!k)
 $('trial').addEventListener('change',()=>{if(S.active){S.dirty=false;startMeasure(S.active.code,true);}else refreshUI();redraw();});
 $('rater').addEventListener('input',()=>refreshUI());
 $('rater').addEventListener('change',()=>{try{localStorage.setItem(STORAGE_KEY+'_rater',rater());}catch(e){}if(S.im&&rater())startMeasure('CONC',true);else{cancelActive(true);refreshUI();redraw();}});
-// 환자명·관절·측·촬영일·view를 바꾸면 이 영상의 기존 기록에도 반영
+// 환자명·관절·측·촬영일·측정일을 바꾸면 이 영상의 기존 기록에도 반영
 function propagate(){
   if(!S.im||!rater()){refreshUI();return;}
   const all=loadRecs();let ch=false;
-  all.forEach(r=>{if(ctxMatch(r)){r.patient_name=$('pid').value.trim();r.joint=$('joint').value.trim();r.side=S.side;r.image_date=$('date').value;r.view=$('view').value;ch=true;}});
+  all.forEach(r=>{if(ctxMatch(r)){r.patient_name=$('pid').value.trim();r.joint=$('joint').value.trim();r.side=S.side;r.image_date=$('date').value;r.measure_date=$('mdate').value;ch=true;}});
   if(ch)saveRecs(all);refreshUI();
 }
-['pid','joint','date','view'].forEach(id=>$(id).addEventListener('change',propagate));
+['pid','joint','date','mdate'].forEach(id=>$(id).addEventListener('change',propagate));
+function todayStr(){const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);}
+$('mdate').value=todayStr();
 ['pid','joint'].forEach(id=>$(id).addEventListener('input',()=>refreshUI()));
 document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{setSide(b.dataset.side);propagate();});
 try{$('rater').value=localStorage.getItem(STORAGE_KEY+'_rater')||'';}catch(e){}
@@ -626,7 +635,7 @@ window.addEventListener('mousemove',e=>{
   const p=evPos(e),dx=p.x-mouse.lx,dy=p.y-mouse.ly;
   if(Math.hypot(p.x-mouse.sx,p.y-mouse.sy)>3)mouse.moved=true;
   mouse.lx=p.x;mouse.ly=p.y;
-  if(mouse.mode==='drag'){S.pts[mouse.drag]=toImg(p.x,p.y);S.dirty=true;redraw();scheduleUI();}
+  if(mouse.mode==='drag'){S.pts[mouse.drag]=toImg(p.x,p.y);if(mouse.drag===4)S.p5raw=S.pts[4];snapP5();S.dirty=true;redraw();scheduleUI();}
   else if(mouse.mode==='pan'&&mouse.moved){S.tx+=dx;S.ty+=dy;cv.style.cursor='grabbing';redraw();}
   else if(mouse.mode==='wl'){const k=Math.max(1,(S.im.mx-S.im.mn)/600);S.ww=Math.max(1,S.ww+dx*k);S.wc=S.wc+dy*k;scheduleRender();}
 });
@@ -644,7 +653,14 @@ function addPoint(sp){
   if(S.pts.length>=S.active.n){flashHint('점을 모두 찍었습니다. 드래그로 수정하거나 Enter로 저장');return;}
   const ip=toImg(sp.x,sp.y);
   if(ip.x<0||ip.y<0||ip.x>S.im.cols||ip.y>S.im.rows)return;
-  S.pts.push(ip);S.dirty=true;refreshUI();redraw();
+  S.pts.push(ip);if(S.pts.length===5)S.p5raw=ip;snapP5();S.dirty=true;refreshUI();redraw();
+}
+// p5는 방향만 정한다 — c1 중심, 반지름 |c1p4|인 원 위로 옮긴다
+function snapP5(){
+  if(S.pts.length<5)return;
+  const P=S.pts.map(toMM),k=circum(P[0],P[1],P[2]);if(!k)return;
+  const r=dist(k.c,P[3]),v=sub(S.p5raw?toMM(S.p5raw):P[4],k.c),l=len(v);if(l<1e-9)return;
+  S.pts[4]=mmToImg({x:k.c.x+v.x/l*r,y:k.c.y+v.y/l*r});
 }
 let flashT=null;
 function flashHint(t,isErr){const h=$('stepHint');h.textContent=t;h.classList.toggle('err',!!isErr);h.classList.remove('hidden');h.dataset.flash='1';clearTimeout(flashT);flashT=setTimeout(()=>{delete h.dataset.flash;refreshUI();},isErr?3000:1500);}
@@ -663,7 +679,7 @@ window.addEventListener('keydown',e=>{
   if($('modalBg').classList.contains('show')){if(e.key==='Escape')$('modalBg').classList.remove('show');return;}
   if(e.key==='Enter'&&S.active){e.preventDefault();saveActive();}
   else if((e.key==='Backspace'||e.key==='Delete')&&S.active&&S.pts.length){e.preventDefault();S.pts.pop();S.dirty=true;refreshUI();redraw();}
-  else if(e.key==='Escape'&&S.active){if(okToLeave())cancelActive();}
+  else if(e.key==='Escape'&&S.active&&S.pts.length){e.preventDefault();S.pts=[];S.dirty=true;refreshUI();redraw();}
 });
 window.addEventListener('resize',()=>{if(!S.im)return;resize();fit();redraw();});
 window.addEventListener('beforeunload',e=>{if(S.active&&S.dirty){e.preventDefault();e.returnValue='';}});
@@ -675,11 +691,12 @@ const rv=k=>r=>{const v=r.res&&r.res[k];return v===undefined||v===null?NA:v;};
 const LU=r=>r.unit||'mm';
 const COLS=[
   ['번호',(r,i)=>i+1],['측정자',r=>r.rater],['회차',r=>r.trial],['환자명',r=>r.patient_name],['관절',r=>r.joint],['측',r=>r.side],
-  ['촬영일',r=>r.image_date],['View',r=>r.view],['파일명',r=>r.file],
+  ['촬영일',r=>r.image_date],['측정일',r=>r.measure_date||(r.saved_at||'').slice(0,10)],['파일명',r=>r.file],
   ['픽셀간격(mm)',r=>r.ps_row_mm===r.ps_col_mm?r.ps_row_mm:r.ps_row_mm+'/'+r.ps_col_mm],['픽셀간격 출처',r=>r.ps_source||'없음(px 단위)'],
   ['길이 단위',LU],['완료 단계',r=>r.stage+'/3'],
   ['c1_x(px)',rv('c1x')],['c1_y(px)',rv('c1y')],['r1',rv('r1')],
-  ['r2',rv('r2')],['|c1p4|',rv('d4')],['|c1p5|',rv('d5')],
+  ['r2',rv('r2')],['|c1p4|',rv('d4')],['|c1p5| (찍은 위치)',rv('d5')],['Δr5 = |c1p5|-r2',rv('dr')],
+  ['Joint thickness (r2-r1)',r=>{const q=r.res||{};return q.jt!=null?q.jt:(q.r2!=null&&q.r1!=null?+(q.r2-q.r1).toFixed(4):NA);}],
   ['a1 중심각(°)',rv('a1')],['a1 호',r=>r.stage>=2?(r.big1?'큰 호':'작은 호'):''],
   ['c2_x(px)',rv('c2x')],['c2_y(px)',rv('c2y')],
   ['a2 원주각(°)',rv('a2')],['a2 중심각(°)',rv('a2c')],['a2 호',r=>r.stage>=3?(r.big2?'큰 호':'작은 호'):''],

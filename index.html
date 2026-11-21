@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hinge 관절 동심원 측정기 v1</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#111827;color:#e5e7eb;font-family:-apple-system,'Segoe UI','Apple SD Gothic Neo',sans-serif;font-size:13px;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+button,select,input{font:inherit;color:inherit;}
+.topbar{background:#0f172a;border-bottom:1px solid #1e3a5f;height:46px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;}
+.title{font-weight:700;color:#4fc3f7;white-space:nowrap;}
+.title small{color:#64748b;font-weight:400;}
+.btn{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 10px;cursor:pointer;white-space:nowrap;}
+.btn:hover{background:#273549;}
+.btn.primary{background:#0369a1;border-color:#0284c7;}
+.btn.primary:hover{background:#0284c7;}
+.btn.danger{background:#7f1d1d;border-color:#991b1b;}
+.btn:disabled{opacity:.4;cursor:default;}
+.spacer{flex:1;}
+.muted{color:#94a3b8;}
+.badge{background:#0a1e35;border:1px solid #1e3a5f;border-radius:5px;padding:3px 8px;font-size:12px;white-space:nowrap;}
+.nav{display:flex;align-items:center;gap:6px;}
+.nav span{min-width:60px;text-align:center;color:#cbd5e1;}
+.main{flex:1;display:flex;min-height:0;}
+.viewer{flex:1;position:relative;background:#000;min-width:0;}
+#cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;display:block;}
+.drop{position:absolute;inset:24px;border:2px dashed #334155;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#94a3b8;text-align:center;font-size:15px;pointer-events:none;}
+.drop small{font-size:12px;color:#64748b;}
+.drop.over{border-color:#4fc3f7;color:#4fc3f7;}
+.stephint{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(3,105,161,.92);color:#fff;padding:6px 14px;border-radius:8px;font-weight:600;pointer-events:none;white-space:nowrap;}
+.stephint.err{background:rgba(153,27,27,.95);}
+.vtools{position:absolute;top:10px;left:10px;display:flex;gap:4px;align-items:center;}
+.vtools button{background:rgba(15,23,42,.85);border:1px solid #334155;border-radius:5px;padding:3px 8px;cursor:pointer;}
+.vtools button.on{background:#0369a1;}
+.vtools span{background:rgba(15,23,42,.85);border-radius:5px;padding:3px 8px;color:#94a3b8;font-size:11px;}
+.help{position:absolute;bottom:6px;left:10px;right:10px;color:#64748b;font-size:11px;pointer-events:none;}
+.hidden{display:none !important;}
+.vh{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;}
+.panel{width:380px;flex-shrink:0;background:#0f172a;border-left:1px solid #1e3a5f;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px;}
+section{background:#111c30;border:1px solid #1e3a5f;border-radius:8px;padding:10px;}
+section h3{font-size:12px;color:#4fc3f7;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.grid{display:grid;grid-template-columns:70px 1fr;gap:6px 8px;align-items:center;}
+.grid label{color:#94a3b8;font-size:12px;}
+.grid input,.grid select{background:#0b1324;border:1px solid #334155;border-radius:5px;padding:4px 6px;width:100%;}
+.grid input.need,.grid select.need{border-color:#ef4444;}
+.seg{display:flex;gap:4px;}
+.seg button{flex:1;background:#0b1324;border:1px solid #334155;border-radius:5px;padding:4px 0;cursor:pointer;}
+.seg button.on{background:#0369a1;border-color:#0284c7;color:#fff;font-weight:700;}
+.ctx{margin-top:8px;font-size:11px;color:#64748b;word-break:break-all;}
+#activeSec.idle{opacity:.75;}
+.aname{font-weight:700;font-size:14px;color:#fff;margin-bottom:6px;}
+.stage{font-size:11px;color:#7dd3fc;margin:8px 0 2px;font-weight:700;}
+.steps{list-style:none;margin:2px 0;}
+.steps li{padding:2px 0 2px 24px;position:relative;color:#94a3b8;}
+.steps li::before{content:attr(data-n);position:absolute;left:0;width:20px;height:15px;border-radius:8px;background:#1e293b;font-size:10px;text-align:center;line-height:15px;top:3px;}
+.steps li.done{color:#22c55e;}
+.steps li.done::before{background:#166534;}
+.steps li.cur{color:#fff;font-weight:600;}
+.steps li.cur::before{background:#0369a1;}
+.res{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px;}
+.res td{padding:3px 4px;border-top:1px solid #1e293b;}
+.res td:first-child{color:#94a3b8;}
+.res td.v{text-align:right;font-weight:700;color:#facc15;white-space:nowrap;}
+.res td.v small{color:#94a3b8;font-weight:400;}
+.res .arcbtn{background:#0b1324;border:1px solid #334155;border-radius:4px;padding:0 6px;font-size:11px;cursor:pointer;margin-left:4px;}
+.warn{color:#f59e0b;font-size:11px;margin:4px 0;}
+.err{color:#ef4444;font-size:12px;margin:4px 0;font-weight:600;}
+.row{display:flex;gap:6px;flex-wrap:wrap;}
+.prog{font-weight:700;}
+.item{border-top:1px solid #1e293b;padding:6px 0;display:flex;align-items:center;gap:6px;}
+.item:first-child{border-top:none;}
+.iname{flex:1;cursor:pointer;text-decoration:underline dotted #475569;}
+.iname:hover{color:#4fc3f7;}
+.item.active{background:#0c2a44;border-radius:6px;}
+.ival{font-size:12px;font-weight:700;text-align:right;}
+.ival.empty{color:#ef4444;font-weight:400;}
+.ival.done{color:#22c55e;}
+.ival.part{color:#f59e0b;}
+.na-btn{background:#0b1324;border:1px solid #334155;border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;color:#94a3b8;}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:10;}
+.modal-bg.show{display:flex;}
+.modal{background:#0f172a;border:1px solid #1e3a5f;border-radius:10px;width:92vw;max-height:86vh;display:flex;flex-direction:column;}
+.modal header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #1e3a5f;}
+.modal header b{flex:1;color:#4fc3f7;}
+.tbl{overflow:auto;padding:0 14px 14px;}
+table.list{border-collapse:collapse;width:100%;font-size:12px;}
+table.list th,table.list td{border-bottom:1px solid #1e293b;padding:4px 6px;text-align:left;white-space:nowrap;}
+table.list th{position:sticky;top:0;background:#0f172a;color:#94a3b8;}
+td.del{cursor:pointer;color:#ef4444;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="title">🦴 Hinge 관절 동심원 측정기 <small>v1</small></span>
+  <button class="btn" id="fileBtn">📂 파일</button><input type="file" id="fileInput" class="vh" multiple>
+  <button class="btn" id="folderBtn">📁 폴더</button><input type="file" id="folderInput" class="vh" webkitdirectory multiple>
+  <span id="nav" class="nav hidden"><button class="btn" id="prevBtn">◀</button><span id="navLabel"></span><button class="btn" id="nextBtn">▶</button></span>
+  <span id="fileLabel" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="psBadge" class="badge">픽셀간격 —</span>
+  <button id="listBtn" class="btn">📋 저장 목록</button>
+  <button id="csvBtn" class="btn">⬇ CSV 내보내기</button>
+</div>
+
+<div class="main">
+  <div class="viewer" id="viewer">
+    <canvas id="cv"></canvas>
+    <div id="drop" class="drop">DICOM 파일을 여기에 끌어다 놓거나 📂 파일 / 📁 폴더 버튼을 누르세요<small>파일은 이 브라우저 안에서만 읽습니다. 어디에도 업로드하지 않습니다.</small></div>
+    <div id="stepHint" class="stephint hidden"></div>
+    <div id="vtools" class="vtools hidden">
+      <button id="zIn" title="확대">＋</button><button id="zOut" title="축소">－</button><button id="zFit" title="화면 맞춤">⊙</button>
+      <button id="wlReset" title="밝기/대비 초기화">W/L 초기화</button>
+      <button id="invBtn" title="흑백 반전">반전</button>
+      <button id="ovBtn" title="저장한 측정 표시 켜기/끄기">저장 측정 표시</button>
+      <span id="wlLabel"></span>
+    </div>
+    <div class="help">좌클릭: 점 찍기 · 좌드래그: 이동 · 점 위에서 드래그: 점 옮기기 · 우드래그 또는 Shift+드래그: 밝기/대비 · 휠: 확대/축소 · Enter: 저장 · Backspace: 마지막 점 삭제 · Esc: 측정 취소</div>
+  </div>
+
+  <div class="panel">
+    <section>
+      <h3>측정 정보</h3>
+      <div class="grid">
+        <label>측정자</label><input id="rater" placeholder="이름 (필수)">
+        <label>회차</label><select id="trial"><option>1</option><option>2</option><option>3</option></select>
+        <label>환자명</label><input id="pid" placeholder="환자명" title="📁 폴더로 열면 폴더 이름이 자동으로 들어간다">
+        <label>관절</label><input id="joint" list="jointList" placeholder="관절 형태"><datalist id="jointList"><option>DIPJ</option><option>Elbow</option><option>Wrist</option></datalist>
+        <label>측</label><div class="seg"><button data-side="Rt">Rt</button><button data-side="Lt">Lt</button></div>
+        <label>촬영일</label><input id="date" type="date">
+        <label>View</label><select id="view"><option value="">— 선택 —</option><option>AP</option><option>PA</option><option>Lateral</option><option>Oblique</option><option>CT sagittal</option><option>기타</option></select>
+      </div>
+      <div class="ctx" id="ctxInfo"></div>
+    </section>
+
+    <section id="activeSec" class="idle">
+      <h3>현재 측정</h3>
+      <div id="activeBody"></div>
+    </section>
+
+    <section>
+      <h3><span>측정 항목</span><span id="progress" class="prog muted"></span></h3>
+      <div id="checklist"></div>
+    </section>
+  </div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <header><b id="modalTitle">저장 목록</b>
+      <button class="btn" id="csvBtn2">⬇ CSV 내보내기</button>
+      <button class="btn danger" id="clearBtn">내 기록 전체 삭제</button>
+      <button class="btn" id="closeModal">닫기</button></header>
+    <div class="tbl"><table class="list"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const NA='N/A';
+const STORAGE_KEY='hinge_conc_v1';
+
+// ════════════════════════════════════════════════════════════════
+// DICOM 파서 (Explicit/Implicit VR Little Endian, 비압축) — uso_wrist v1에서 가져옴
+// ════════════════════════════════════════════════════════════════
+const UNDEF=0xFFFFFFFF;
+const LONG_VR=new Set(['OB','OD','OF','OL','OV','OW','SQ','SV','UC','UN','UR','UT','UV']);
+const TS_NAMES={'1.2.840.10008.1.2':'Implicit VR LE','1.2.840.10008.1.2.1':'Explicit VR LE','1.2.840.10008.1.2.2':'Explicit VR BE',
+  '1.2.840.10008.1.2.4.50':'JPEG Baseline','1.2.840.10008.1.2.4.51':'JPEG Extended','1.2.840.10008.1.2.4.57':'JPEG Lossless','1.2.840.10008.1.2.4.70':'JPEG Lossless SV1',
+  '1.2.840.10008.1.2.4.80':'JPEG-LS Lossless','1.2.840.10008.1.2.4.81':'JPEG-LS','1.2.840.10008.1.2.4.90':'JPEG 2000 Lossless','1.2.840.10008.1.2.4.91':'JPEG 2000','1.2.840.10008.1.2.5':'RLE'};
+
+function parseDicom(buffer){
+  const u8=new Uint8Array(buffer),dv=new DataView(buffer),n=u8.length;
+  const asc=(o,l)=>{let s='';for(let i=0;i<l&&o+i<n;i++)s+=String.fromCharCode(u8[o+i]);return s;};
+  if(n<132||asc(128,4)!=='DICM')throw new Error('DICOM 파일이 아닙니다 (DICM 표식 없음).');
+  const tags={};
+  function readEl(p,explicit){
+    const g=dv.getUint16(p,true),e=dv.getUint16(p+2,true);
+    if(g===0xFFFE){const len=dv.getUint32(p+4,true);return{g,e,vr:null,len,off:p+8,next:p+8+(len===UNDEF?0:len)};}
+    let vr=null,len,off;
+    if(explicit||g===0x0002){
+      vr=asc(p+4,2);
+      if(LONG_VR.has(vr)){len=dv.getUint32(p+8,true);off=p+12;}
+      else{len=dv.getUint16(p+6,true);off=p+8;}
+    }else{len=dv.getUint32(p+4,true);off=p+8;}
+    let next;
+    if(len===UNDEF){
+      if(g===0x7FE0&&e===0x0010)next=n;
+      else next=skipSeq(off,explicit && vr!=='UN');
+    }else next=off+len;
+    return{g,e,vr,len,off,next};
+  }
+  function skipSeq(q,explicit){
+    while(q+8<=n){
+      const g=dv.getUint16(q,true),e=dv.getUint16(q+2,true),len=dv.getUint32(q+4,true);
+      if(g===0xFFFE&&e===0xE0DD)return q+8;
+      if(g===0xFFFE&&e===0xE000){q=(len===UNDEF)?skipItem(q+8,explicit):q+8+len;}
+      else return q;
+    }
+    return n;
+  }
+  function skipItem(q,explicit){
+    while(q+8<=n){
+      const g=dv.getUint16(q,true),e=dv.getUint16(q+2,true);
+      if(g===0xFFFE&&e===0xE00D)return q+8;
+      q=readEl(q,explicit).next;
+    }
+    return n;
+  }
+  let p=132,ts='1.2.840.10008.1.2.1';
+  while(p+8<=n&&dv.getUint16(p,true)===0x0002){
+    const el=readEl(p,true);
+    if(el.e===0x0010)ts=asc(el.off,el.len).replace(/[\0 ]+$/,'');
+    p=el.next;
+  }
+  if(ts==='1.2.840.10008.1.2.2')throw new Error('Big Endian DICOM은 지원하지 않습니다.');
+  const explicit=ts!=='1.2.840.10008.1.2';
+  while(p+8<=n){
+    let el;
+    try{el=readEl(p,explicit);}catch(err){break;}
+    const key=((el.g<<16)|el.e)>>>0;
+    tags[key]=el;
+    if(el.next<=p)break;
+    p=el.next;
+  }
+  const T=(g,e)=>tags[((g<<16)|e)>>>0];
+  const str=(g,e)=>{const t=T(g,e);if(!t||t.len===UNDEF)return '';return asc(t.off,t.len).replace(/\0/g,'').trim();};
+  const us=(g,e,d)=>{const t=T(g,e);if(!t)return d;if(t.len>=2)return dv.getUint16(t.off,true);return d;};
+  const ds=(g,e)=>{const s=str(g,e);if(!s)return[];return s.split('\\').map(parseFloat).filter(v=>!isNaN(v));};
+
+  const rows=us(0x0028,0x0010,0),cols=us(0x0028,0x0011,0);
+  const bitsAlloc=us(0x0028,0x0100,16),bitsStored=us(0x0028,0x0101,bitsAlloc),pixRep=us(0x0028,0x0103,0),spp=us(0x0028,0x0002,1);
+  const photo=str(0x0028,0x0004).toUpperCase();
+  const slope=ds(0x0028,0x1053)[0]||1,intercept=ds(0x0028,0x1052)[0]||0;
+  const pd=T(0x7FE0,0x0010);
+  if(!pd)throw new Error('픽셀 데이터(7FE0,0010)가 없습니다.');
+  if(pd.len===UNDEF||(ts!=='1.2.840.10008.1.2'&&ts!=='1.2.840.10008.1.2.1'))
+    throw new Error('압축된 DICOM은 아직 지원하지 않습니다.\n전송구문: '+ts+' ('+(TS_NAMES[ts]||'알 수 없음')+')');
+  if(!rows||!cols)throw new Error('영상 크기(Rows/Columns)를 읽지 못했습니다.');
+  const npx=rows*cols,bytesPer=bitsAlloc/8,need=npx*spp*bytesPer;
+  if(pd.off+need>n)throw new Error('픽셀 데이터 길이가 부족합니다.');
+  const raw=buffer.slice(pd.off,pd.off+need);
+  let px;
+  if(spp===3){const src=new Uint8Array(raw);px=new Uint16Array(npx);for(let i=0;i<npx;i++)px[i]=Math.round((src[i*3]+src[i*3+1]+src[i*3+2])/3);}
+  else if(bitsAlloc===8)px=new Uint8Array(raw);
+  else if(bitsAlloc===16){
+    if(pixRep===1){px=new Int16Array(raw);if(bitsStored<16){const sh=16-bitsStored;for(let i=0;i<npx;i++)px[i]=(px[i]<<sh)>>sh;}}
+    else{px=new Uint16Array(raw);if(bitsStored<16){const m=(1<<bitsStored)-1;for(let i=0;i<npx;i++)px[i]&=m;}}
+  }else throw new Error('Bits Allocated '+bitsAlloc+'은 지원하지 않습니다.');
+  let mn=Infinity,mx=-Infinity;
+  for(let i=0;i<npx;i++){const v=px[i];if(v<mn)mn=v;if(v>mx)mx=v;}
+  let psR=null,psC=null,psSrc='없음';
+  let v=ds(0x0028,0x0030);
+  if(v.length&&v[0]>0){psR=v[0];psC=v[1]||v[0];psSrc='PixelSpacing (0028,0030)';}
+  else{v=ds(0x0018,0x1164);if(v.length&&v[0]>0){psR=v[0];psC=v[1]||v[0];psSrc='ImagerPixelSpacing (0018,1164)';}}
+  let wc=ds(0x0028,0x1050)[0],ww=ds(0x0028,0x1051)[0];
+  if(wc!==undefined&&ww>0){wc=(wc-intercept)/slope;ww=ww/slope;}
+  else{
+    const hist=new Uint32Array(mx-mn+1);for(let i=0;i<npx;i++)hist[px[i]-mn]++;
+    let acc=0,lo=mn,hi=mx;const a=npx*0.01,b=npx*0.99;let gotLo=false;
+    for(let k=0;k<hist.length;k++){acc+=hist[k];if(!gotLo&&acc>=a){lo=k+mn;gotLo=true;}if(acc>=b){hi=k+mn;break;}}
+    wc=(lo+hi)/2;ww=Math.max(1,hi-lo);
+  }
+  const sd=str(0x0008,0x0020);
+  return{rows,cols,px,mn,mx,mono1:photo==='MONOCHROME1',wc0:wc,ww0:ww,psR,psC,psSrc,ts,
+    studyDate:/^\d{8}$/.test(sd)?sd.slice(0,4)+'-'+sd.slice(4,6)+'-'+sd.slice(6,8):'',
+    seriesDesc:str(0x0008,0x103E),studyDesc:str(0x0008,0x1030),protocol:str(0x0018,0x1030),
+    laterality:str(0x0020,0x0062)||str(0x0020,0x0060),viewPos:str(0x0018,0x5101)};
+}
+
+// ════════════════════════════════════════════════════════════════
+// 기하 계산 — 모두 mm 좌표 (x*psC, y*psR)에서 한다. 비등방 픽셀도 원이 원으로 유지된다
+// ════════════════════════════════════════════════════════════════
+const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y}),dot=(a,b)=>a.x*b.x+a.y*b.y,len=a=>Math.hypot(a.x,a.y),dist=(a,b)=>len(sub(a,b));
+const DEG=180/Math.PI;
+// 세 점을 지나는 원 (외접원). 세 점이 거의 일직선이면 null
+function circum(a,b,c){
+  const bx=b.x-a.x,by=b.y-a.y,qx=c.x-a.x,qy=c.y-a.y,d=2*(bx*qy-by*qx);
+  const sc=Math.max(Math.hypot(bx,by),Math.hypot(qx,qy))||1;
+  if(Math.abs(d)<1e-6*sc*sc)return null;
+  const b2=bx*bx+by*by,c2=qx*qx+qy*qy,ux=(qy*b2-by*c2)/d,uy=(bx*c2-qx*b2)/d;
+  return{c:{x:a.x+ux,y:a.y+uy},r:Math.hypot(ux,uy)};
+}
+// 중심 c에서 본 pa→pb 원호. big=false면 작은 호(≤180°), true면 큰 호
+function arcSpan(c,pa,pb,big){
+  const t0=Math.atan2(pa.y-c.y,pa.x-c.x);
+  let dt=Math.atan2(pb.y-c.y,pb.x-c.x)-t0;
+  while(dt>Math.PI)dt-=2*Math.PI;while(dt<=-Math.PI)dt+=2*Math.PI;
+  if(big)dt=dt>0?dt-2*Math.PI:dt+2*Math.PI;
+  return{t0,dt,deg:Math.abs(dt)*DEG};
+}
+/* 동심원 측정. P: mm 좌표 점 배열(최대 7개), big1/big2: 호 선택
+   1단계 p1–p3 → 원 1: c1, r1
+   2단계 p4·p5 → c1 중심 동심원: r2 = (|c1p4| + |c1p5|)/2, a1 = ∠p4 c1 p5 (원호의 중심각)
+   3단계 p6·p7 → 반지름 r2로 p6·p7을 지나는 원 (중심 후보 2개 중 c1에 가까운 것 = c2), a2 = 원호 p6p7의 원주각(= 중심각/2) */
+function computeConc(P,big1,big2){
+  const R={stage:0,warn:[]};
+  if(P.length<3)return R;
+  const k=circum(P[0],P[1],P[2]);
+  if(!k){R.err='p1–p3이 거의 일직선이라 원을 만들 수 없습니다.';return R;}
+  R.c1=k.c;R.r1=k.r;R.stage=1;
+  if(P.length<4)return R;
+  R.d4=dist(k.c,P[3]);
+  if(P.length<5)return R;
+  R.d5=dist(k.c,P[4]);R.r2=(R.d4+R.d5)/2;
+  const s1=arcSpan(k.c,P[3],P[4],big1);R.a1=s1.deg;R.arc1=s1;R.stage=2;
+  if(R.r2>0&&Math.abs(R.d4-R.d5)/R.r2>0.05)R.warn.push('|c1p4|와 |c1p5| 차이가 '+(Math.abs(R.d4-R.d5)/R.r2*100).toFixed(1)+'%입니다. r2는 두 거리의 평균입니다.');
+  if(P.length<7)return R;
+  const q6=P[5],q7=P[6],ch=sub(q7,q6),half=len(ch)/2;
+  if(half<1e-9){R.err='p6과 p7이 같은 위치입니다.';return R;}
+  if(half>R.r2*(1+1e-9)){R.err='p6–p7 거리('+(2*half).toFixed(2)+')가 지름 2·r2('+(2*R.r2).toFixed(2)+')보다 커서 반지름 r2인 원을 만들 수 없습니다.';return R;}
+  const h=Math.sqrt(Math.max(0,R.r2*R.r2-half*half)),m={x:(q6.x+q7.x)/2,y:(q6.y+q7.y)/2},nv={x:-ch.y/(2*half),y:ch.x/(2*half)};
+  const A={x:m.x+nv.x*h,y:m.y+nv.y*h},B={x:m.x-nv.x*h,y:m.y-nv.y*h},dA=dist(A,k.c),dB=dist(B,k.c);
+  if(h>1e-9&&Math.abs(dA-dB)<1e-6*Math.max(1,R.r2))R.warn.push('c1이 p6–p7 직선 위에 있어 두 중심 후보가 c1에서 같은 거리입니다.');
+  R.c2=dA<=dB?A:B;
+  const s2=arcSpan(R.c2,q6,q7,big2);R.a2c=s2.deg;R.a2=s2.deg/2;R.arc2=s2;
+  R.cc=dist(k.c,R.c2);R.stage=3;
+  return R;
+}
+
+// ════════════════════════════════════════════════════════════════
+// 측정 항목 정의 — 기능을 더하려면 여기에 항목을 추가한다
+// ════════════════════════════════════════════════════════════════
+const MEASURES=[{
+  code:'CONC',name:'동심원 측정',
+  stages:[
+    {n:3,title:'1단계 · 원 1 (c1, r1)',steps:['p1 — 원 1 위의 점','p2 — 원 1 위의 점','p3 — 원 1 위의 점']},
+    {n:5,title:'2단계 · c1 중심 동심원 (r2, a1)',steps:['p4 — 원호 시작점','p5 — 원호 끝점']},
+    {n:7,title:'3단계 · 반지름 r2인 원 2 (c2, a2)',steps:['p6 — 원 2 위의 점','p7 — 원 2 위의 점']}
+  ]
+}];
+MEASURES.forEach(m=>{m.steps=m.stages.flatMap(s=>s.steps);m.n=m.steps.length;});
+const M_BY={};MEASURES.forEach(m=>M_BY[m.code]=m);
+
+// ════════════════════════════════════════════════════════════════
+// 상태 · 저장소
+// ════════════════════════════════════════════════════════════════
+const $=id=>document.getElementById(id);
+const cv=$('cv'),cx=cv.getContext('2d');
+const off=document.createElement('canvas'),ox=off.getContext('2d');
+const S={im:null,file:'',wc:0,ww:1,invert:false,overlay:false,scale:1,tx:0,ty:0,
+  active:null,pts:[],big1:false,big2:false,side:'',files:[],idx:-1};
+let mouse={down:false};
+
+function loadRecs(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]');}catch(e){return[];}}
+function saveRecs(a){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(a));}catch(e){alert('브라우저 저장에 실패했습니다: '+e.message);}}
+function rater(){return $('rater').value.trim();}
+// 기록 단위: 측정자 + 회차 + 파일 + 항목
+function ctxMatch(r){return r.rater===rater()&&String(r.trial)===$('trial').value&&r.file===S.file;}
+function ctxRecs(){return loadRecs().filter(ctxMatch);}
+
+// ════════════════════════════════════════════════════════════════
+// 영상 표시
+// ════════════════════════════════════════════════════════════════
+function renderImage(){
+  const im=S.im;if(!im)return;
+  off.width=im.cols;off.height=im.rows;
+  const id=ox.createImageData(im.cols,im.rows),d=id.data;
+  const span=im.mx-im.mn+1,lut=new Uint8Array(span),lo=S.wc-S.ww/2,inv=im.mono1!==S.invert;
+  for(let k=0;k<span;k++){let g=((k+im.mn)-lo)/S.ww*255;g=g<0?0:g>255?255:g;lut[k]=inv?255-g:g;}
+  const px=im.px,mn=im.mn,N=im.rows*im.cols;
+  for(let i=0,j=0;i<N;i++,j+=4){const g=lut[px[i]-mn];d[j]=g;d[j+1]=g;d[j+2]=g;d[j+3]=255;}
+  ox.putImageData(id,0,0);
+  $('wlLabel').textContent='WL '+Math.round(S.wc)+' / WW '+Math.round(S.ww);
+}
+function resize(){const r=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;cv.width=Math.round(r.width*dpr);cv.height=Math.round(r.height*dpr);cx.setTransform(dpr,0,0,dpr,0,0);}
+function fit(){if(!S.im)return;const r=cv.getBoundingClientRect();S.scale=Math.min(r.width/S.im.cols,r.height/S.im.rows)*0.96;S.tx=(r.width-S.im.cols*S.scale)/2;S.ty=(r.height-S.im.rows*S.scale)/2;}
+const toImg=(sx,sy)=>({x:(sx-S.tx)/S.scale,y:(sy-S.ty)/S.scale});
+const toScr=p=>({x:p.x*S.scale+S.tx,y:p.y*S.scale+S.ty});
+const psC=()=>(S.im&&S.im.psC)||1,psR=()=>(S.im&&S.im.psR)||1;
+const toMM=p=>({x:p.x*psC(),y:p.y*psR()});
+const mmToImg=p=>({x:p.x/psC(),y:p.y/psR()});
+const mmScr=p=>toScr(mmToImg(p));
+function unitLen(){return S.im&&S.im.psR?'mm':'px';}
+function fmtL(v){return v===undefined||!isFinite(v)?'—':v.toFixed(2)+' '+unitLen();}
+function fmtA(v){return v===undefined||!isFinite(v)?'—':v.toFixed(1)+'°';}
+
+// ════════════════════════════════════════════════════════════════
+// 그리기
+// ════════════════════════════════════════════════════════════════
+function line(a,b,col,w,dash){cx.strokeStyle=col;cx.lineWidth=w||1.5;cx.setLineDash(dash||[]);cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(b.x,b.y);cx.stroke();cx.setLineDash([]);}
+// mm 공간의 원호를 화면에 그린다 (비등방 픽셀이면 화면에서는 타원)
+function arcMM(c,r,t0,dt,col,w,dash){
+  const N=Math.max(24,Math.ceil(Math.abs(dt)/(2*Math.PI)*360));
+  cx.strokeStyle=col;cx.lineWidth=w||1.5;cx.setLineDash(dash||[]);cx.beginPath();
+  for(let i=0;i<=N;i++){const t=t0+dt*i/N,s=mmScr({x:c.x+r*Math.cos(t),y:c.y+r*Math.sin(t)});i?cx.lineTo(s.x,s.y):cx.moveTo(s.x,s.y);}
+  cx.stroke();cx.setLineDash([]);
+}
+function dotP(p,col,lbl){
+  cx.fillStyle=col;cx.beginPath();cx.arc(p.x,p.y,4,0,Math.PI*2);cx.fill();cx.strokeStyle='#000';cx.lineWidth=1;cx.stroke();
+  if(lbl)label(lbl,{x:p.x+7,y:p.y-7},col,11);
+}
+function cross(p,col,lbl){line({x:p.x-7,y:p.y},{x:p.x+7,y:p.y},col,2);line({x:p.x,y:p.y-7},{x:p.x,y:p.y+7},col,2);if(lbl)label(lbl,{x:p.x+8,y:p.y+14},col,12);}
+function label(t,p,col,sz){cx.font='bold '+(sz||13)+'px sans-serif';cx.fillStyle='#000';cx.fillText(t,p.x+1,p.y+1);cx.fillStyle=col;cx.fillText(t,p.x,p.y);}
+function boxText(t,p,col){cx.font='bold 13px sans-serif';const w=cx.measureText(t).width;cx.fillStyle='rgba(0,0,0,.65)';cx.fillRect(p.x-3,p.y-14,w+6,18);cx.fillStyle=col;cx.fillText(t,p.x,p.y);}
+const PAL={c1:'#facc15',c2:'#f472b6',c3:'#34d399'};
+function drawConc(ptsImg,big1,big2,pal,showLbl){
+  const P=ptsImg.map(toMM),R=computeConc(P,big1,big2),s=ptsImg.map(toScr);
+  if(R.stage>=1){
+    arcMM(R.c1,R.r1,0,2*Math.PI,pal.c1,1.8);
+    cross(mmScr(R.c1),pal.c1,showLbl?'c1':'');
+    if(showLbl)boxText('r1 '+fmtL(R.r1),{x:mmScr(R.c1).x+10,y:mmScr(R.c1).y+34},pal.c1);
+  }
+  if(R.stage>=1&&P.length>=4){
+    const c1s=mmScr(R.c1);
+    [3,4].forEach(i=>{if(s[i])line(c1s,s[i],pal.c2,1.2,[5,4]);});
+    if(R.stage<2)arcMM(R.c1,R.d4,0,2*Math.PI,pal.c2,1,[4,6]); // p5 전 미리보기
+  }
+  if(R.stage>=2){
+    arcMM(R.c1,R.r2,0,2*Math.PI,pal.c2,1,[6,5]);
+    arcMM(R.c1,R.r2,R.arc1.t0,R.arc1.dt,pal.c2,3.5);
+    if(showLbl){const tm=R.arc1.t0+R.arc1.dt/2,q=mmScr({x:R.c1.x+R.r2*1.12*Math.cos(tm),y:R.c1.y+R.r2*1.12*Math.sin(tm)});boxText('a1 '+fmtA(R.a1),q,pal.c2);}
+  }
+  if(R.stage>=3){
+    arcMM(R.c2,R.r2,0,2*Math.PI,pal.c3,1,[6,5]);
+    arcMM(R.c2,R.r2,R.arc2.t0,R.arc2.dt,pal.c3,3.5);
+    const c2s=mmScr(R.c2);cross(c2s,pal.c3,showLbl?'c2':'');
+    line(mmScr(R.c1),c2s,'#fff',1.2,[2,3]);
+    if(showLbl){const tm=R.arc2.t0+R.arc2.dt/2,q=mmScr({x:R.c2.x+R.r2*1.25*Math.cos(tm),y:R.c2.y+R.r2*1.25*Math.sin(tm)});boxText('a2 '+fmtA(R.a2),q,pal.c3);}
+  }
+  s.forEach((p,i)=>dotP(p,i<3?pal.c1:i<5?pal.c2:pal.c3,showLbl?'p'+(i+1):''));
+  return R;
+}
+function redraw(){
+  const r=cv.getBoundingClientRect();cx.clearRect(0,0,r.width,r.height);
+  if(!S.im)return;
+  cx.imageSmoothingEnabled=S.scale<1;
+  cx.drawImage(off,S.tx,S.ty,S.im.cols*S.scale,S.im.rows*S.scale);
+  if(S.overlay)ctxRecs().forEach(rec=>{
+    if(S.active&&S.active.code===rec.code)return;
+    const c='#38bdf8';drawConc(rec.pts.map(p=>({x:p[0],y:p[1]})),rec.big1,rec.big2,{c1:c,c2:c,c3:c},false);
+  });
+  if(S.active&&S.pts.length)drawConc(S.pts,S.big1,S.big2,PAL,true);
+}
+
+// ════════════════════════════════════════════════════════════════
+// 파일 열기
+// ════════════════════════════════════════════════════════════════
+function okToLeave(){return !(S.active&&S.dirty)||confirm('저장하지 않은 측정이 있습니다. 버리고 넘어갈까요?');}
+async function openFile(file){
+  let im;
+  try{im=parseDicom(await file.arrayBuffer());}
+  catch(err){alert('DICOM을 열 수 없습니다: '+file.name+'\n\n'+err.message);return false;}
+  S.im=im;S.file=file.name;S.wc=im.wc0;S.ww=im.ww0;S.invert=false;$('invBtn').classList.remove('on');
+  cancelActive(true);
+  if(im.studyDate)$('date').value=im.studyDate;
+  const desc=(im.seriesDesc+' '+im.protocol+' '+im.viewPos).toLowerCase();
+  $('view').value=/lat/.test(desc)?'Lateral':/obl/.test(desc)?'Oblique':/\bpa\b/.test(desc)?'PA':/\bap\b/.test(desc)?'AP':'';
+  const lat=(im.laterality||'').toUpperCase();
+  setSide(lat==='R'||/\brt\b|right/.test(desc)?'Rt':lat==='L'||/\blt\b|left/.test(desc)?'Lt':'');
+  // 이 영상에 저장된 기록이 있으면 그 정보를 우선한다
+  const ex=rater()?ctxRecs()[0]:null;
+  const seg=(file.webkitRelativePath||'').split('/');
+  if(ex){
+    $('pid').value=ex.patient_name||'';$('joint').value=ex.joint||'';$('view').value=ex.view||'';setSide(ex.side||'');if(ex.image_date)$('date').value=ex.image_date;
+    if(seg.length>1&&seg[0].trim()&&ex.patient_name&&ex.patient_name!==seg[0].trim().normalize('NFC'))
+      flashHint('저장된 환자명 "'+ex.patient_name+'"을 그대로 두었습니다 (폴더 이름: '+seg[0]+')',true);
+  }else if(seg.length>1&&seg[0].trim())$('pid').value=seg[0].trim().normalize('NFC');
+  const b=$('psBadge');
+  if(im.psR){const an=Math.abs(im.psR-im.psC)>1e-4;b.textContent=(an?'⚠ 비등방 ':'✓ ')+im.psR.toFixed(3)+(an?' / '+im.psC.toFixed(3):'')+' mm/px';b.style.color=an?'#f59e0b':'#22c55e';b.title=im.psSrc;}
+  else{b.textContent='⚠ 픽셀간격 없음 — px 단위';b.style.color='#ef4444';alert('⚠️ 이 파일에는 픽셀 간격 정보가 없습니다.\n길이는 px 단위로 저장됩니다.');}
+  $('fileLabel').textContent=file.name+'  ·  '+(im.seriesDesc||im.studyDesc||'')+'  ·  '+im.cols+'×'+im.rows;
+  $('drop').classList.add('hidden');$('vtools').classList.remove('hidden');
+  renderImage();resize();fit();
+  if(rater())startMeasure('CONC',true);
+  redraw();refreshUI();
+  return true;
+}
+async function goto(i){if(i<0||i>=S.files.length||!okToLeave())return;S.idx=i;$('navLabel').textContent=(i+1)+' / '+S.files.length;await openFile(S.files[i]);}
+function setFiles(list){
+  const fs=[...list].filter(f=>/\.dcm$/i.test(f.name)||!/\.[a-z0-9]{1,5}$/i.test(f.name)).filter(f=>!f.name.startsWith('.'))
+    .sort((a,b)=>(a.webkitRelativePath||a.name).localeCompare(b.webkitRelativePath||b.name,undefined,{numeric:true}));
+  if(!fs.length){alert('DICOM 파일을 찾지 못했습니다.');return;}
+  if(!okToLeave())return;
+  S.files=fs;$('nav').classList.toggle('hidden',fs.length<2);
+  S.idx=0;$('navLabel').textContent='1 / '+fs.length;openFile(fs[0]);
+}
+$('fileBtn').onclick=()=>$('fileInput').click();
+$('folderBtn').onclick=()=>$('folderInput').click();
+['fileInput','folderInput'].forEach(id=>$(id).addEventListener('change',e=>{if(e.target.files.length)setFiles(e.target.files);e.target.value='';}));
+$('prevBtn').onclick=()=>goto(S.idx-1);
+$('nextBtn').onclick=()=>goto(S.idx+1);
+const viewer=$('viewer');
+viewer.addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('over');});
+viewer.addEventListener('dragleave',()=>$('drop').classList.remove('over'));
+viewer.addEventListener('drop',e=>{e.preventDefault();$('drop').classList.remove('over');if(e.dataTransfer.files.length)setFiles(e.dataTransfer.files);});
+
+// ════════════════════════════════════════════════════════════════
+// 측정 진행
+// ════════════════════════════════════════════════════════════════
+function startMeasure(code,quiet){
+  if(!S.im){if(!quiet)alert('먼저 DICOM 파일을 여세요.');return;}
+  if(!rater()){if(!quiet)alert('측정자 이름을 먼저 입력하세요.\n(기록이 측정자·회차별로 따로 저장됩니다)');return;}
+  if(!quiet&&!okToLeave())return;
+  S.active=M_BY[code];
+  const ex=ctxRecs().find(r=>r.code===code);
+  S.pts=ex?ex.pts.map(p=>({x:p[0],y:p[1]})):[];S.big1=!!(ex&&ex.big1);S.big2=!!(ex&&ex.big2);S.dirty=false;
+  refreshUI();redraw();
+}
+function cancelActive(silent){S.active=null;S.pts=[];S.dirty=false;if(!silent){refreshUI();redraw();}}
+function needContext(){
+  const m=[];if(!$('pid').value.trim())m.push('환자명');if(!$('joint').value.trim())m.push('관절');if(!S.side)m.push('측');if(!$('date').value)m.push('촬영일');if(!$('view').value)m.push('View');return m;
+}
+function curResult(){return computeConc(S.pts.map(toMM),S.big1,S.big2);}
+function saveActive(){
+  const a=S.active;if(!a)return;
+  const n=S.pts.length,R=curResult();
+  if(R.err){alert('저장할 수 없습니다: '+R.err);return;}
+  const done=a.stages.filter(s=>n>=s.n).length;
+  if(!done){alert('최소 1단계(p1–p3)까지 찍어야 저장할 수 있습니다.');return;}
+  if(!a.stages.some(s=>s.n===n)){alert('단계 중간입니다 (점 '+n+'개). 이 단계의 점을 마저 찍거나 Backspace로 지우세요.');return;}
+  if(n<a.n&&!confirm(done+'단계까지만 저장합니다. 나머지 값은 N/A로 남습니다. 저장할까요?'))return;
+  const miss=needContext();
+  if(miss.length&&!confirm('다음 정보가 비어 있습니다: '+miss.join(', ')+'\n그래도 저장할까요?'))return;
+  const im=S.im,r4=v=>v===undefined?undefined:+v.toFixed(4),img=p=>p?mmToImg(p):null;
+  const c1=img(R.c1),c2=img(R.c2);
+  const rec={id:Date.now()+'-'+Math.random().toString(36).slice(2,7),saved_at:new Date().toISOString(),
+    rater:rater(),trial:$('trial').value,patient_name:$('pid').value.trim(),joint:$('joint').value.trim(),side:S.side,image_date:$('date').value,view:$('view').value,
+    file:S.file,ps_row_mm:im.psR||'',ps_col_mm:im.psC||'',ps_source:im.psSrc,unit:unitLen(),
+    code:a.code,stage:R.stage,big1:S.big1,big2:S.big2,
+    pts:S.pts.map(p=>[+p.x.toFixed(1),+p.y.toFixed(1)]),
+    res:{r1:r4(R.r1),c1x:c1&&+c1.x.toFixed(1),c1y:c1&&+c1.y.toFixed(1),d4:r4(R.d4),d5:r4(R.d5),r2:r4(R.r2),a1:r4(R.a1),
+      c2x:c2&&+c2.x.toFixed(1),c2y:c2&&+c2.y.toFixed(1),a2:r4(R.a2),a2c:r4(R.a2c),cc:r4(R.cc)}};
+  const all=loadRecs(),i=all.findIndex(r=>ctxMatch(r)&&r.code===a.code);
+  if(i>=0){rec.id=all[i].id;all[i]=rec;}else all.push(rec);
+  saveRecs(all);S.dirty=false;
+  flashHint('저장했습니다');refreshUI();redraw();
+}
+function deleteRec(code){
+  const ex=ctxRecs().find(r=>r.code===code);if(!ex)return;
+  if(!confirm('이 영상의 「'+M_BY[code].name+'」 기록을 지울까요?'))return;
+  saveRecs(loadRecs().filter(r=>!(ctxMatch(r)&&r.code===code)));
+  if(S.active&&S.active.code===code){S.pts=[];S.dirty=false;}
+  refreshUI();redraw();
+}
+
+// ════════════════════════════════════════════════════════════════
+// UI
+// ════════════════════════════════════════════════════════════════
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function setSide(s){S.side=s;document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.side===s));}
+function resultTable(R){
+  const L=unitLen(),pxP=p=>p?'('+mmToImg(p).x.toFixed(0)+', '+mmToImg(p).y.toFixed(0)+') px':'—';
+  const arcBtn=(k,big)=>'<button class="arcbtn" data-arc="'+k+'" title="작은 호 ↔ 큰 호">'+(big?'큰 호':'작은 호')+' ⇄</button>';
+  return '<table class="res">'
+    +'<tr><td>c1 중심</td><td class="v"><small>'+pxP(R.c1)+'</small></td></tr>'
+    +'<tr><td>r1 반지름</td><td class="v">'+fmtL(R.r1)+'</td></tr>'
+    +'<tr><td>r2 동심원 반지름</td><td class="v">'+fmtL(R.r2)+(R.d5!==undefined?'<br><small>|c1p4| '+R.d4.toFixed(2)+' · |c1p5| '+R.d5.toFixed(2)+'</small>':'')+'</td></tr>'
+    +'<tr><td>a1 ∠p4 c1 p5'+(R.stage>=2?arcBtn(1,S.big1):'')+'</td><td class="v">'+fmtA(R.a1)+'</td></tr>'
+    +'<tr><td>c2 중심</td><td class="v"><small>'+pxP(R.c2)+'</small></td></tr>'
+    +'<tr><td>a2 원호 p6p7 원주각'+(R.stage>=3?arcBtn(2,S.big2):'')+'</td><td class="v">'+fmtA(R.a2)+(R.a2c!==undefined?'<br><small>중심각 '+R.a2c.toFixed(1)+'°</small>':'')+'</td></tr>'
+    +'<tr><td>c1–c2 거리 <small class="muted">(참고)</small></td><td class="v">'+fmtL(R.cc)+'</td></tr>'
+    +'</table>';
+}
+function refreshUI(){
+  $('rater').classList.toggle('need',!rater());
+  ['pid','joint','date'].forEach(id=>$(id).classList.toggle('need',!$(id).value.trim()));
+  $('view').classList.toggle('need',!$('view').value);
+  $('ctxInfo').textContent=S.im?('기록 단위: '+(rater()||'측정자?')+' · '+$('trial').value+'회차 · '+S.file):'';
+  const a=S.active,body=$('activeBody'),h=$('stepHint');
+  $('activeSec').classList.toggle('idle',!a);
+  if(!a){
+    body.innerHTML='<div class="muted">'+(S.im?(rater()?'아래 측정 항목 이름을 누르면 측정을 시작합니다.':'측정자 이름을 입력하면 측정을 시작합니다.'):'DICOM 파일을 여세요.')+'</div>';
+    if(!h.dataset.flash)h.classList.add('hidden');
+  }else{
+    const n=S.pts.length,R=curResult();let k=0;
+    body.innerHTML='<div class="aname">'+esc(a.name)+'</div>'
+      +a.stages.map(st=>'<div class="stage">'+esc(st.title)+'</div><ol class="steps">'+st.steps.map(s=>{const i=k++;return '<li data-n="p'+(i+1)+'" class="'+(i<n?'done':i===n?'cur':'')+'">'+esc(s.replace(/^p\d+ — /,''))+'</li>';}).join('')+'</ol>').join('')
+      +(R.err?'<div class="err">⚠ '+esc(R.err)+'</div>':'')+R.warn.map(w=>'<div class="warn">'+esc(w)+'</div>').join('')
+      +resultTable(R)
+      +'<div class="row"><button class="btn primary" id="saveBtn"'+(n<3?' disabled':'')+'>💾 저장 (Enter)</button>'
+      +'<button class="btn" id="undoBtn"'+(n?'':' disabled')+'>↶ 마지막 점</button><button class="btn" id="clearPts">점 모두 지우기</button><button class="btn" id="cancelBtn">닫기</button></div>';
+    $('saveBtn').onclick=saveActive;
+    $('undoBtn').onclick=()=>{S.pts.pop();S.dirty=true;refreshUI();redraw();};
+    $('clearPts').onclick=()=>{S.pts=[];S.dirty=true;refreshUI();redraw();};
+    $('cancelBtn').onclick=()=>{if(okToLeave())cancelActive();};
+    if(!h.dataset.flash){
+      h.classList.remove('err');
+      if(R.err){h.textContent='⚠ '+R.err;h.classList.add('err');}
+      else h.textContent=n<a.n?'('+(n+1)+'/'+a.n+') '+a.steps[n]:'점을 드래그해 수정하거나 Enter로 저장';
+      h.classList.remove('hidden');
+    }
+  }
+  // 측정 항목 목록
+  const recs=(S.im&&rater())?ctxRecs():[];
+  $('checklist').innerHTML=MEASURES.map(m=>{
+    const r=recs.find(x=>x.code===m.code);
+    const v=!r?'<span class="ival empty">미측정</span>':r.stage>=m.stages.length?'<span class="ival done">완료</span>':'<span class="ival part">'+r.stage+'단계까지</span>';
+    return '<div class="item'+(a&&a.code===m.code?' active':'')+'"><span class="iname" data-code="'+m.code+'">'+esc(m.name)+'</span>'+v+(r?'<button class="na-btn" data-del="'+m.code+'">삭제</button>':'')+'</div>';
+  }).join('');
+  $('progress').textContent=S.im&&rater()?'':'측정자 입력 필요';
+}
+$('checklist').addEventListener('click',e=>{const t=e.target;if(t.dataset.code)startMeasure(t.dataset.code);else if(t.dataset.del)deleteRec(t.dataset.del);});
+$('activeBody').addEventListener('click',e=>{const k=e.target.dataset.arc;if(!k)return;if(k==='1')S.big1=!S.big1;else S.big2=!S.big2;S.dirty=true;refreshUI();redraw();});
+// 회차를 바꾸면 그 회차 기록을 불러온다
+$('trial').addEventListener('change',()=>{if(S.active){S.dirty=false;startMeasure(S.active.code,true);}else refreshUI();redraw();});
+$('rater').addEventListener('input',()=>refreshUI());
+$('rater').addEventListener('change',()=>{try{localStorage.setItem(STORAGE_KEY+'_rater',rater());}catch(e){}if(S.im&&rater())startMeasure('CONC',true);else{cancelActive(true);refreshUI();redraw();}});
+// 환자명·관절·측·촬영일·view를 바꾸면 이 영상의 기존 기록에도 반영
+function propagate(){
+  if(!S.im||!rater()){refreshUI();return;}
+  const all=loadRecs();let ch=false;
+  all.forEach(r=>{if(ctxMatch(r)){r.patient_name=$('pid').value.trim();r.joint=$('joint').value.trim();r.side=S.side;r.image_date=$('date').value;r.view=$('view').value;ch=true;}});
+  if(ch)saveRecs(all);refreshUI();
+}
+['pid','joint','date','view'].forEach(id=>$(id).addEventListener('change',propagate));
+['pid','joint'].forEach(id=>$(id).addEventListener('input',()=>refreshUI()));
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{setSide(b.dataset.side);propagate();});
+try{$('rater').value=localStorage.getItem(STORAGE_KEY+'_rater')||'';}catch(e){}
+
+// ════════════════════════════════════════════════════════════════
+// 마우스·키보드
+// ════════════════════════════════════════════════════════════════
+function evPos(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+function nearPt(sp){if(!S.active)return-1;let best=-1,bd=10;S.pts.forEach((p,i)=>{const s=toScr(p),d=Math.hypot(s.x-sp.x,s.y-sp.y);if(d<bd){bd=d;best=i;}});return best;}
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('mousedown',e=>{
+  if(!S.im)return;const p=evPos(e);
+  mouse={down:true,sx:p.x,sy:p.y,lx:p.x,ly:p.y,moved:false,mode:null,drag:-1};
+  if(e.button===2||(e.button===0&&e.shiftKey))mouse.mode='wl';
+  else if(e.button===0){const i=nearPt(p);if(i>=0){mouse.mode='drag';mouse.drag=i;}else mouse.mode='pan';}
+  else if(e.button===1)mouse.mode='pan';
+});
+window.addEventListener('mousemove',e=>{
+  if(!mouse.down)return;
+  const p=evPos(e),dx=p.x-mouse.lx,dy=p.y-mouse.ly;
+  if(Math.hypot(p.x-mouse.sx,p.y-mouse.sy)>3)mouse.moved=true;
+  mouse.lx=p.x;mouse.ly=p.y;
+  if(mouse.mode==='drag'){S.pts[mouse.drag]=toImg(p.x,p.y);S.dirty=true;redraw();scheduleUI();}
+  else if(mouse.mode==='pan'&&mouse.moved){S.tx+=dx;S.ty+=dy;cv.style.cursor='grabbing';redraw();}
+  else if(mouse.mode==='wl'){const k=Math.max(1,(S.im.mx-S.im.mn)/600);S.ww=Math.max(1,S.ww+dx*k);S.wc=S.wc+dy*k;scheduleRender();}
+});
+window.addEventListener('mouseup',e=>{
+  if(!mouse.down)return;const p=evPos(e);mouse.down=false;cv.style.cursor='crosshair';
+  // 움직이지 않은 클릭은 기존 점 근처여도 새 점으로 찍는다 (p6·p7이 p4·p5 가까이 올 수 있음)
+  if((mouse.mode==='pan'||mouse.mode==='drag')&&!mouse.moved&&e.target===cv)addPoint(p);
+  else if(mouse.mode==='drag')refreshUI();
+});
+let rq=false,uq=false;
+function scheduleRender(){if(rq)return;rq=true;requestAnimationFrame(()=>{rq=false;renderImage();redraw();});}
+function scheduleUI(){if(uq)return;uq=true;requestAnimationFrame(()=>{uq=false;refreshUI();});}
+function addPoint(sp){
+  if(!S.active){if(!rater()){flashHint('측정자 이름을 먼저 입력하세요',true);return;}startMeasure('CONC',true);}
+  if(S.pts.length>=S.active.n){flashHint('점을 모두 찍었습니다. 드래그로 수정하거나 Enter로 저장');return;}
+  const ip=toImg(sp.x,sp.y);
+  if(ip.x<0||ip.y<0||ip.x>S.im.cols||ip.y>S.im.rows)return;
+  S.pts.push(ip);S.dirty=true;refreshUI();redraw();
+}
+let flashT=null;
+function flashHint(t,isErr){const h=$('stepHint');h.textContent=t;h.classList.toggle('err',!!isErr);h.classList.remove('hidden');h.dataset.flash='1';clearTimeout(flashT);flashT=setTimeout(()=>{delete h.dataset.flash;refreshUI();},isErr?3000:1500);}
+cv.addEventListener('wheel',e=>{
+  if(!S.im)return;e.preventDefault();
+  const p=evPos(e),f=Math.exp(-e.deltaY*0.0015),ns=Math.min(20,Math.max(0.02,S.scale*f));
+  S.tx=p.x-(p.x-S.tx)*ns/S.scale;S.ty=p.y-(p.y-S.ty)*ns/S.scale;S.scale=ns;redraw();
+},{passive:false});
+function zoomBy(f){const r=cv.getBoundingClientRect(),p={x:r.width/2,y:r.height/2},ns=Math.min(20,Math.max(0.02,S.scale*f));S.tx=p.x-(p.x-S.tx)*ns/S.scale;S.ty=p.y-(p.y-S.ty)*ns/S.scale;S.scale=ns;redraw();}
+$('zIn').onclick=()=>zoomBy(1.3);$('zOut').onclick=()=>zoomBy(1/1.3);$('zFit').onclick=()=>{fit();redraw();};
+$('wlReset').onclick=()=>{if(!S.im)return;S.wc=S.im.wc0;S.ww=S.im.ww0;renderImage();redraw();};
+$('invBtn').onclick=()=>{if(!S.im)return;S.invert=!S.invert;$('invBtn').classList.toggle('on',S.invert);renderImage();redraw();};
+$('ovBtn').onclick=()=>{S.overlay=!S.overlay;$('ovBtn').classList.toggle('on',S.overlay);redraw();};
+window.addEventListener('keydown',e=>{
+  if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
+  if($('modalBg').classList.contains('show')){if(e.key==='Escape')$('modalBg').classList.remove('show');return;}
+  if(e.key==='Enter'&&S.active){e.preventDefault();saveActive();}
+  else if((e.key==='Backspace'||e.key==='Delete')&&S.active&&S.pts.length){e.preventDefault();S.pts.pop();S.dirty=true;refreshUI();redraw();}
+  else if(e.key==='Escape'&&S.active){if(okToLeave())cancelActive();}
+});
+window.addEventListener('resize',()=>{if(!S.im)return;resize();fit();redraw();});
+window.addEventListener('beforeunload',e=>{if(S.active&&S.dirty){e.preventDefault();e.returnValue='';}});
+
+// ════════════════════════════════════════════════════════════════
+// 저장 목록 · CSV — 기록 1건(측정자+회차+파일+항목) = 1줄
+// ════════════════════════════════════════════════════════════════
+const rv=k=>r=>{const v=r.res&&r.res[k];return v===undefined||v===null?NA:v;};
+const LU=r=>r.unit||'mm';
+const COLS=[
+  ['번호',(r,i)=>i+1],['측정자',r=>r.rater],['회차',r=>r.trial],['환자명',r=>r.patient_name],['관절',r=>r.joint],['측',r=>r.side],
+  ['촬영일',r=>r.image_date],['View',r=>r.view],['파일명',r=>r.file],
+  ['픽셀간격(mm)',r=>r.ps_row_mm===r.ps_col_mm?r.ps_row_mm:r.ps_row_mm+'/'+r.ps_col_mm],['픽셀간격 출처',r=>r.ps_source||'없음(px 단위)'],
+  ['길이 단위',LU],['완료 단계',r=>r.stage+'/3'],
+  ['c1_x(px)',rv('c1x')],['c1_y(px)',rv('c1y')],['r1',rv('r1')],
+  ['r2',rv('r2')],['|c1p4|',rv('d4')],['|c1p5|',rv('d5')],
+  ['a1 중심각(°)',rv('a1')],['a1 호',r=>r.stage>=2?(r.big1?'큰 호':'작은 호'):''],
+  ['c2_x(px)',rv('c2x')],['c2_y(px)',rv('c2y')],
+  ['a2 원주각(°)',rv('a2')],['a2 중심각(°)',rv('a2c')],['a2 호',r=>r.stage>=3?(r.big2?'큰 호':'작은 호'):''],
+  ['c1-c2 거리',rv('cc')],
+  ['최종 저장',r=>r.saved_at],['점좌표 p1-p7(px,JSON)',r=>JSON.stringify(r.pts)]
+];
+function myRows(){const r=rater();return loadRecs().filter(x=>x.rater===r).sort((a,b)=>
+  String(a.patient_name).localeCompare(String(b.patient_name))||String(a.joint).localeCompare(String(b.joint))||String(a.trial).localeCompare(String(b.trial))||a.file.localeCompare(b.file,undefined,{numeric:true}));}
+function renderTable(){
+  const rows=myRows(),show=COLS.length-1;
+  $('modalTitle').textContent='저장 목록 — '+(rater()||'(측정자 미입력)')+' · '+rows.length+'건';
+  $('thead').innerHTML='<tr>'+COLS.slice(0,show).map(([h])=>'<th>'+esc(h)+'</th>').join('')+'<th></th></tr>';
+  $('tbody').innerHTML=rows.map((r,i)=>'<tr>'+COLS.slice(0,show).map(([,f])=>{let v=f(r,i);if(typeof v==='number'&&!Number.isInteger(v))v=+v.toFixed(2);return '<td>'+esc(v??'')+'</td>';}).join('')+'<td class="del" data-id="'+esc(r.id)+'">삭제</td></tr>').join('');
+}
+$('listBtn').onclick=()=>{if(!rater()){alert('측정자 이름을 먼저 입력하세요.\n저장 목록은 측정자별로만 보입니다.');return;}renderTable();$('modalBg').classList.add('show');};
+$('closeModal').onclick=()=>$('modalBg').classList.remove('show');
+$('modalBg').onclick=e=>{if(e.target.id==='modalBg')$('modalBg').classList.remove('show');};
+$('tbody').onclick=e=>{const id=e.target.dataset.id;if(!id||!confirm('이 기록을 삭제할까요?'))return;saveRecs(loadRecs().filter(r=>r.id!==id));renderTable();if(S.active)startMeasure(S.active.code,true);refreshUI();redraw();};
+$('clearBtn').onclick=()=>{const r=rater();if(!r)return;if(!confirm(r+'의 기록 '+myRows().length+'건을 모두 삭제할까요?\n(CSV로 먼저 내보냈는지 확인하세요)'))return;saveRecs(loadRecs().filter(x=>x.rater!==r));renderTable();cancelActive();};
+function exportCsv(){
+  const r=rater();if(!r){alert('측정자 이름을 먼저 입력하세요.');return;}
+  const rows=myRows();if(!rows.length){alert('저장된 기록이 없습니다.');return;}
+  const q=v=>{const s=String(v===undefined||v===null?'':v);return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  const csv='﻿'+COLS.map(([h])=>q(h)).join(',')+'\n'+rows.map((row,i)=>COLS.map(([,f])=>q(f(row,i))).join(',')).join('\n');
+  const d=new Date(),ds=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=r.replace(/[\\/:*?"<>|\s]/g,'_')+'_hinge_'+ds+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+$('csvBtn').onclick=exportCsv;$('csvBtn2').onclick=exportCsv;
+
+refreshUI();
+</script>
+</body>
+</html>
